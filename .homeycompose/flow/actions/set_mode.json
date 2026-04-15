@@ -1,0 +1,39 @@
+{
+  "title": {
+    "en": "Set mode"
+  },
+  "titleFormatted": {
+    "en": "Set mode to [[mode]]"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=vartronic_convector"
+    },
+    {
+      "type": "dropdown",
+      "name": "mode",
+      "values": [
+        {
+          "id": "heat",
+          "label": {
+            "en": "Heat"
+          }
+        },
+        {
+          "id": "cool",
+          "label": {
+            "en": "Cool"
+          }
+        },
+        {
+          "id": "heat_cool",
+          "label": {
+            "en": "Heat / cool"
+          }
+        }
+      ]
+    }
+  ]
+}

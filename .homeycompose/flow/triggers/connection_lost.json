@@ -1,0 +1,21 @@
+{
+  "title": {
+    "en": "Connection was lost"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=vartronic_convector"
+    }
+  ],
+  "tokens": [
+    {
+      "name": "reason",
+      "type": "string",
+      "title": {
+        "en": "Reason"
+      }
+    }
+  ]
+}

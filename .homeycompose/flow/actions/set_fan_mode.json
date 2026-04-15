@@ -1,0 +1,51 @@
+{
+  "title": {
+    "en": "Set fan mode"
+  },
+  "titleFormatted": {
+    "en": "Set fan mode to [[fan_mode]]"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=vartronic_convector"
+    },
+    {
+      "type": "dropdown",
+      "name": "fan_mode",
+      "values": [
+        {
+          "id": "off",
+          "label": {
+            "en": "Off"
+          }
+        },
+        {
+          "id": "low",
+          "label": {
+            "en": "Low"
+          }
+        },
+        {
+          "id": "medium",
+          "label": {
+            "en": "Medium"
+          }
+        },
+        {
+          "id": "high",
+          "label": {
+            "en": "High"
+          }
+        },
+        {
+          "id": "auto",
+          "label": {
+            "en": "Auto"
+          }
+        }
+      ]
+    }
+  ]
+}

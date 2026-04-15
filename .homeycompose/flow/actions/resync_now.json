@@ -1,0 +1,12 @@
+{
+  "title": {
+    "en": "Resync device now"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=vartronic_convector"
+    }
+  ]
+}

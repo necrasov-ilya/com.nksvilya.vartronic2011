@@ -1,0 +1,378 @@
+{
+  "_comment": "This file is generated. Please edit .homeycompose/* instead.",
+  "id": "com.nksvilya.vartronic2011",
+  "version": "0.1.0",
+  "compatibility": ">=10.0.0",
+  "sdk": 3,
+  "runtime": "nodejs",
+  "platforms": [
+    "local"
+  ],
+  "brandColor": "#1B6C8E",
+  "name": {
+    "en": "Vartronic"
+  },
+  "description": {
+    "en": "Local LAN integration for VARMANN Vartronic convectors over Modbus TCP."
+  },
+  "category": [
+    "climate"
+  ],
+  "permissions": [],
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png"
+  },
+  "author": {
+    "name": "Ilya"
+  },
+  "capabilities": {
+    "vartronic_fan_mode": {
+      "title": {
+        "en": "Fan mode"
+      },
+      "type": "enum",
+      "getable": true,
+      "setable": true,
+      "uiComponent": "picker",
+      "icon": "/assets/capabilities/vartronic_fan_mode.svg",
+      "values": [
+        {
+          "id": "off",
+          "title": {
+            "en": "Off"
+          }
+        },
+        {
+          "id": "low",
+          "title": {
+            "en": "Low"
+          }
+        },
+        {
+          "id": "medium",
+          "title": {
+            "en": "Medium"
+          }
+        },
+        {
+          "id": "high",
+          "title": {
+            "en": "High"
+          }
+        },
+        {
+          "id": "auto",
+          "title": {
+            "en": "Auto"
+          }
+        }
+      ]
+    },
+    "vartronic_mode": {
+      "title": {
+        "en": "Mode"
+      },
+      "type": "enum",
+      "getable": true,
+      "setable": true,
+      "uiComponent": "picker",
+      "icon": "/assets/capabilities/vartronic_mode.svg",
+      "values": [
+        {
+          "id": "heat",
+          "title": {
+            "en": "Heat"
+          }
+        },
+        {
+          "id": "cool",
+          "title": {
+            "en": "Cool"
+          }
+        },
+        {
+          "id": "heat_cool",
+          "title": {
+            "en": "Heat / cool"
+          }
+        }
+      ]
+    }
+  },
+  "flow": {
+    "actions": [
+      {
+        "id": "resync_now",
+        "title": {
+          "en": "Resync device now"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vartronic_convector"
+          }
+        ]
+      },
+      {
+        "id": "set_fan_mode",
+        "title": {
+          "en": "Set fan mode"
+        },
+        "titleFormatted": {
+          "en": "Set fan mode to [[fan_mode]]"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vartronic_convector"
+          },
+          {
+            "type": "dropdown",
+            "name": "fan_mode",
+            "values": [
+              {
+                "id": "off",
+                "label": {
+                  "en": "Off"
+                }
+              },
+              {
+                "id": "low",
+                "label": {
+                  "en": "Low"
+                }
+              },
+              {
+                "id": "medium",
+                "label": {
+                  "en": "Medium"
+                }
+              },
+              {
+                "id": "high",
+                "label": {
+                  "en": "High"
+                }
+              },
+              {
+                "id": "auto",
+                "label": {
+                  "en": "Auto"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "set_mode",
+        "title": {
+          "en": "Set mode"
+        },
+        "titleFormatted": {
+          "en": "Set mode to [[mode]]"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vartronic_convector"
+          },
+          {
+            "type": "dropdown",
+            "name": "mode",
+            "values": [
+              {
+                "id": "heat",
+                "label": {
+                  "en": "Heat"
+                }
+              },
+              {
+                "id": "cool",
+                "label": {
+                  "en": "Cool"
+                }
+              },
+              {
+                "id": "heat_cool",
+                "label": {
+                  "en": "Heat / cool"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "id": "has_alarm",
+        "title": {
+          "en": "Has active alarm"
+        },
+        "titleFormatted": {
+          "en": "[[device]] has an active alarm"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vartronic_convector"
+          }
+        ]
+      },
+      {
+        "id": "is_online",
+        "title": {
+          "en": "Is online"
+        },
+        "titleFormatted": {
+          "en": "[[device]] is online"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vartronic_convector"
+          }
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "id": "connection_lost",
+        "title": {
+          "en": "Connection was lost"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vartronic_convector"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "reason",
+            "type": "string",
+            "title": {
+              "en": "Reason"
+            }
+          }
+        ]
+      },
+      {
+        "id": "connection_restored",
+        "title": {
+          "en": "Connection was restored"
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=vartronic_convector"
+          }
+        ]
+      }
+    ]
+  },
+  "drivers": [
+    {
+      "id": "vartronic_convector",
+      "name": {
+        "en": "Vartronic Convector"
+      },
+      "class": "thermostat",
+      "connectivity": [
+        "lan"
+      ],
+      "capabilities": [
+        "target_temperature",
+        "measure_temperature",
+        "alarm_generic",
+        "vartronic_mode",
+        "vartronic_fan_mode"
+      ],
+      "capabilitiesOptions": {
+        "target_temperature": {
+          "min": 5,
+          "max": 35,
+          "step": 0.5
+        }
+      },
+      "images": {
+        "small": "/drivers/vartronic_convector/assets/images/small.png",
+        "large": "/drivers/vartronic_convector/assets/images/large.png"
+      },
+      "pair": [
+        {
+          "id": "configure_gateway",
+          "navigation": {
+            "next": "list_devices"
+          }
+        },
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_devices"
+          }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ],
+      "repair": [
+        {
+          "id": "update_gateway"
+        }
+      ],
+      "settings": [
+        {
+          "id": "host",
+          "type": "text",
+          "label": {
+            "en": "Gateway host"
+          },
+          "hint": {
+            "en": "Changing this value updates all devices that share the same gateway key."
+          }
+        },
+        {
+          "id": "port",
+          "type": "number",
+          "label": {
+            "en": "Gateway port"
+          }
+        },
+        {
+          "id": "disableThermostatModeOnLan",
+          "type": "checkbox",
+          "label": {
+            "en": "Disable thermostat mode on LAN writes"
+          },
+          "hint": {
+            "en": "Sets the 0x0100 flag in HeatChill writes for installations that should not use thermostat mode on LAN."
+          },
+          "value": false
+        },
+        {
+          "id": "forceFanControlFromNetwork",
+          "type": "checkbox",
+          "label": {
+            "en": "Force fan speed from network"
+          },
+          "hint": {
+            "en": "Sets the 0x0200 flag in HeatChill writes for installations that allow network fan control."
+          },
+          "value": false
+        }
+      ]
+    }
+  ]
+}

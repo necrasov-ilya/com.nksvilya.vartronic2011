@@ -1,0 +1,30 @@
+{
+  "title": {
+    "en": "Mode"
+  },
+  "type": "enum",
+  "getable": true,
+  "setable": true,
+  "uiComponent": "picker",
+  "icon": "/assets/capabilities/vartronic_mode.svg",
+  "values": [
+    {
+      "id": "heat",
+      "title": {
+        "en": "Heat"
+      }
+    },
+    {
+      "id": "cool",
+      "title": {
+        "en": "Cool"
+      }
+    },
+    {
+      "id": "heat_cool",
+      "title": {
+        "en": "Heat / cool"
+      }
+    }
+  ]
+}

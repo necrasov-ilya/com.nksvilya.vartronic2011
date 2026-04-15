@@ -1,0 +1,92 @@
+{
+  "name": {
+    "en": "Vartronic Convector"
+  },
+  "class": "thermostat",
+  "connectivity": [
+    "lan"
+  ],
+  "capabilities": [
+    "target_temperature",
+    "measure_temperature",
+    "alarm_generic",
+    "vartronic_mode",
+    "vartronic_fan_mode"
+  ],
+  "capabilitiesOptions": {
+    "target_temperature": {
+      "min": 5,
+      "max": 35,
+      "step": 0.5
+    }
+  },
+  "images": {
+    "small": "/drivers/vartronic_convector/assets/images/small.png",
+    "large": "/drivers/vartronic_convector/assets/images/large.png"
+  },
+  "pair": [
+    {
+      "id": "configure_gateway",
+      "navigation": {
+        "next": "list_devices"
+      }
+    },
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ],
+  "repair": [
+    {
+      "id": "update_gateway"
+    }
+  ],
+  "settings": [
+    {
+      "id": "host",
+      "type": "text",
+      "label": {
+        "en": "Gateway host"
+      },
+      "hint": {
+        "en": "Changing this value updates all devices that share the same gateway key."
+      }
+    },
+    {
+      "id": "port",
+      "type": "number",
+      "label": {
+        "en": "Gateway port"
+      }
+    },
+    {
+      "id": "disableThermostatModeOnLan",
+      "type": "checkbox",
+      "label": {
+        "en": "Disable thermostat mode on LAN writes"
+      },
+      "hint": {
+        "en": "Sets the 0x0100 flag in HeatChill writes for installations that should not use thermostat mode on LAN."
+      },
+      "value": false
+    },
+    {
+      "id": "forceFanControlFromNetwork",
+      "type": "checkbox",
+      "label": {
+        "en": "Force fan speed from network"
+      },
+      "hint": {
+        "en": "Sets the 0x0200 flag in HeatChill writes for installations that allow network fan control."
+      },
+      "value": false
+    }
+  ]
+}

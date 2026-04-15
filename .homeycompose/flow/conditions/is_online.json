@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "Is online"
+  },
+  "titleFormatted": {
+    "en": "[[device]] is online"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=vartronic_convector"
+    }
+  ]
+}

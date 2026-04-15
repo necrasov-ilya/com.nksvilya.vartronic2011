@@ -1,0 +1,8 @@
+coverage/
+docs/
+node_modules/.cache/
+src/
+tests/
+tsconfig.json
+jest.config.cjs
+.eslintrc.cjs

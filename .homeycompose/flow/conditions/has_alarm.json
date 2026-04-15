@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "Has active alarm"
+  },
+  "titleFormatted": {
+    "en": "[[device]] has an active alarm"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=vartronic_convector"
+    }
+  ]
+}

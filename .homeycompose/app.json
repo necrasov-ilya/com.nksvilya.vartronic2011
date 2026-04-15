@@ -1,0 +1,24 @@
+{
+  "id": "com.nksvilya.vartronic2011",
+  "version": "0.1.0",
+  "compatibility": ">=10.0.0",
+  "sdk": 3,
+  "runtime": "nodejs",
+  "platforms": ["local"],
+  "brandColor": "#1B6C8E",
+  "name": {
+    "en": "Vartronic"
+  },
+  "description": {
+    "en": "Local LAN integration for VARMANN Vartronic convectors over Modbus TCP."
+  },
+  "category": ["climate"],
+  "permissions": [],
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png"
+  },
+  "author": {
+    "name": "Ilya"
+  }
+}
