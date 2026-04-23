@@ -11,6 +11,7 @@ import {
   encodeFanMode,
   encodeMode,
   encodeTemperature,
+  normalizeExternalTemperature,
 } from './register-profile';
 import { diffDesiredState } from './resync-policy';
 import type {
@@ -28,7 +29,7 @@ const FULL_REFRESH_PRIORITY = 10;
 const HEARTBEAT_PRIORITY = 20;
 const FULL_REFRESH_EVERY_SUCCESSFUL_WINDOWS = 5;
 
-interface DebouncedSetpointWrite {
+interface DebouncedTemperatureWrite {
   timeout: NodeJS.Timeout;
   value: number;
   promise: Promise<void>;
@@ -45,7 +46,9 @@ export class GatewayManager {
 
   private readonly scheduler: PollScheduler;
 
-  private readonly debouncedSetpoints = new Map<string, DebouncedSetpointWrite>();
+  private readonly debouncedSetpoints = new Map<string, DebouncedTemperatureWrite>();
+
+  private readonly debouncedExternalTemperatures = new Map<string, DebouncedTemperatureWrite>();
 
   private readonly transport: ModbusTcpTransport;
 
@@ -87,6 +90,12 @@ export class GatewayManager {
       this.debouncedSetpoints.delete(deviceId);
     }
 
+    const pendingExternalTemperature = this.debouncedExternalTemperatures.get(deviceId);
+    if (pendingExternalTemperature) {
+      this.timerHost.clearTimeout(pendingExternalTemperature.timeout);
+      this.debouncedExternalTemperatures.delete(deviceId);
+    }
+
     if (this.devices.size === 0) {
       await this.destroy();
     }
@@ -99,6 +108,11 @@ export class GatewayManager {
       pending.reject(new Error('Gateway manager is shutting down.'));
     }
     this.debouncedSetpoints.clear();
+    for (const pending of this.debouncedExternalTemperatures.values()) {
+      this.timerHost.clearTimeout(pending.timeout);
+      pending.reject(new Error('Gateway manager is shutting down.'));
+    }
+    this.debouncedExternalTemperatures.clear();
     this.requestQueue.close();
     await this.transport.close();
   }
@@ -123,7 +137,13 @@ export class GatewayManager {
     if (existing) {
       this.timerHost.clearTimeout(existing.timeout);
       existing.value = value;
-      existing.timeout = this.scheduleSetpointWrite(device, existing);
+      existing.timeout = this.scheduleTemperatureWrite(
+        device,
+        existing,
+        VARTRONIC_REGISTERS.UST_TMP,
+        'target_temperature',
+        this.debouncedSetpoints,
+      );
       return existing.promise;
     }
 
@@ -134,7 +154,7 @@ export class GatewayManager {
       rejectPromise = reject;
     });
 
-    const pending: DebouncedSetpointWrite = {
+    const pending: DebouncedTemperatureWrite = {
       timeout: null as unknown as NodeJS.Timeout,
       value,
       promise,
@@ -142,8 +162,56 @@ export class GatewayManager {
       reject: rejectPromise,
     };
 
-    pending.timeout = this.scheduleSetpointWrite(device, pending);
+    pending.timeout = this.scheduleTemperatureWrite(
+      device,
+      pending,
+      VARTRONIC_REGISTERS.UST_TMP,
+      'target_temperature',
+      this.debouncedSetpoints,
+    );
     this.debouncedSetpoints.set(device.deviceId, pending);
+    await promise;
+  }
+
+  public async writeExternalTemperature(device: ManagedVartronicDevice, value: number): Promise<void> {
+    const normalizedValue = normalizeExternalTemperature(value);
+    const existing = this.debouncedExternalTemperatures.get(device.deviceId);
+    if (existing) {
+      this.timerHost.clearTimeout(existing.timeout);
+      existing.value = normalizedValue;
+      existing.timeout = this.scheduleTemperatureWrite(
+        device,
+        existing,
+        VARTRONIC_REGISTERS.TMP_OUT,
+        'external_temperature',
+        this.debouncedExternalTemperatures,
+      );
+      return existing.promise;
+    }
+
+    let resolvePromise!: () => void;
+    let rejectPromise!: (error: unknown) => void;
+    const promise = new Promise<void>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+
+    const pending: DebouncedTemperatureWrite = {
+      timeout: null as unknown as NodeJS.Timeout,
+      value: normalizedValue,
+      promise,
+      resolve: resolvePromise,
+      reject: rejectPromise,
+    };
+
+    pending.timeout = this.scheduleTemperatureWrite(
+      device,
+      pending,
+      VARTRONIC_REGISTERS.TMP_OUT,
+      'external_temperature',
+      this.debouncedExternalTemperatures,
+    );
+    this.debouncedExternalTemperatures.set(device.deviceId, pending);
     await promise;
   }
 
@@ -279,6 +347,14 @@ export class GatewayManager {
       await this.performWrite(device.modbusId, VARTRONIC_REGISTERS.UST_TMP, encodeTemperature(drift.targetTemperature));
     }
 
+    if (typeof drift.externalTemperature === 'number') {
+      await this.performWrite(
+        device.modbusId,
+        VARTRONIC_REGISTERS.TMP_OUT,
+        encodeTemperature(normalizeExternalTemperature(drift.externalTemperature)),
+      );
+    }
+
     if (drift.mode) {
       await this.performWrite(
         device.modbusId,
@@ -306,19 +382,22 @@ export class GatewayManager {
     this.pendingFullRefresh = true;
   }
 
-  private scheduleSetpointWrite(
+  private scheduleTemperatureWrite(
     device: ManagedVartronicDevice,
-    pending: DebouncedSetpointWrite,
+    pending: DebouncedTemperatureWrite,
+    register: number,
+    label: string,
+    pendingWrites: Map<string, DebouncedTemperatureWrite>,
   ): NodeJS.Timeout {
     return this.timerHost.setTimeout(() => {
       void this.requestQueue
         .enqueue(async () => {
-          await this.performWrite(device.modbusId, VARTRONIC_REGISTERS.UST_TMP, encodeTemperature(pending.value));
+          await this.performWrite(device.modbusId, register, encodeTemperature(pending.value));
           await this.refreshDevice(device);
-        }, { label: `target_temperature:${device.modbusId}`, priority: WRITE_PRIORITY })
+        }, { label: `${label}:${device.modbusId}`, priority: WRITE_PRIORITY })
         .then(() => pending.resolve(), error => pending.reject(error))
         .finally(() => {
-          this.debouncedSetpoints.delete(device.deviceId);
+          pendingWrites.delete(device.deviceId);
         });
     }, 250);
   }

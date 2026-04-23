@@ -2,6 +2,7 @@ import type { DesiredState, DeviceSnapshot } from './types';
 
 export interface ResyncDiff {
   targetTemperature?: number;
+  externalTemperature?: number;
   mode?: NonNullable<DesiredState['mode']>;
   fanMode?: NonNullable<DesiredState['fanMode']>;
 }
@@ -13,6 +14,13 @@ export function diffDesiredState(actual: DeviceSnapshot, desired: DesiredState):
     const delta = Math.abs((actual.targetTemperature ?? Number.NaN) - desired.targetTemperature);
     if (Number.isNaN(delta) || delta > 0.05) {
       diff.targetTemperature = desired.targetTemperature;
+    }
+  }
+
+  if (typeof desired.externalTemperature === 'number') {
+    const delta = Math.abs((actual.measureTemperature ?? Number.NaN) - desired.externalTemperature);
+    if (Number.isNaN(delta) || delta > 0.05) {
+      diff.externalTemperature = desired.externalTemperature;
     }
   }
 

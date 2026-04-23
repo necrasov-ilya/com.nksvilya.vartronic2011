@@ -50,6 +50,26 @@ export const SAFE_HEARTBEAT_READ = {
   count: 1,
 };
 
+export const EXTERNAL_TEMPERATURE_RANGE = {
+  min: 1,
+  max: 50,
+} as const;
+
+export function normalizeExternalTemperature(value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new Error('External room temperature must be a finite number.');
+  }
+
+  const normalized = Math.round(value * 10) / 10;
+  if (normalized < EXTERNAL_TEMPERATURE_RANGE.min || normalized > EXTERNAL_TEMPERATURE_RANGE.max) {
+    throw new Error(
+      `External room temperature must be between ${EXTERNAL_TEMPERATURE_RANGE.min} C and ${EXTERNAL_TEMPERATURE_RANGE.max} C.`,
+    );
+  }
+
+  return normalized;
+}
+
 export function decodeTemperature(raw: number): number {
   return raw / 10;
 }

@@ -30,6 +30,7 @@ export interface VartronicDeviceData {
 
 export interface DesiredState {
   targetTemperature?: number | null;
+  externalTemperature?: number | null;
   mode?: VartronicMode | null;
   fanMode?: VartronicFanMode | null;
 }

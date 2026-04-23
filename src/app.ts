@@ -3,6 +3,7 @@ import Homey, { type FlowCardTriggerDevice } from 'homey';
 import { GatewayRegistry } from './lib/vartronic/gateway-registry';
 import { VartronicLogger } from './lib/vartronic/logger';
 import type { VartronicConvectorDevice } from './drivers/vartronic_convector/device';
+import { normalizeExternalTemperature } from './lib/vartronic/register-profile';
 import type { VartronicFanMode, VartronicMode } from './lib/vartronic/types';
 
 export default class VartronicApp extends Homey.App {
@@ -37,6 +38,12 @@ export default class VartronicApp extends Homey.App {
 
   public async writeTargetTemperature(device: VartronicConvectorDevice, value: number): Promise<void> {
     await this.gatewayRegistry.writeTargetTemperature(device, value);
+  }
+
+  public async writeExternalTemperature(device: VartronicConvectorDevice, value: number): Promise<void> {
+    const normalizedValue = normalizeExternalTemperature(value);
+    await device.setDesiredState({ externalTemperature: normalizedValue });
+    await this.gatewayRegistry.writeExternalTemperature(device, normalizedValue);
   }
 
   public async writeMode(device: VartronicConvectorDevice, value: VartronicMode): Promise<void> {
@@ -78,6 +85,13 @@ export default class VartronicApp extends Homey.App {
       .getActionCard('set_fan_mode')
       .registerRunListener(async args => {
         await this.writeFanMode(args.device as VartronicConvectorDevice, args.fan_mode as VartronicFanMode);
+        return true;
+      });
+
+    this.homey.flow
+      .getActionCard('set_external_temperature')
+      .registerRunListener(async args => {
+        await this.writeExternalTemperature(args.device as VartronicConvectorDevice, Number(args.temperature));
         return true;
       });
 

@@ -44,6 +44,10 @@ export class GatewayRegistry {
     await this.getOrCreateManager(device.getGatewaySettings()).writeTargetTemperature(device, value);
   }
 
+  public async writeExternalTemperature(device: ManagedVartronicDevice, value: number): Promise<void> {
+    await this.getOrCreateManager(device.getGatewaySettings()).writeExternalTemperature(device, value);
+  }
+
   public async writeMode(device: ManagedVartronicDevice, value: VartronicMode): Promise<void> {
     await this.getOrCreateManager(device.getGatewaySettings()).writeMode(device, value);
   }
