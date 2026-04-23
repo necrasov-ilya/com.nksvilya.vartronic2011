@@ -2,8 +2,12 @@ import type { VartronicLogger } from './logger';
 import { ModbusTcpTransport } from './modbus-tcp-transport';
 import {
   FULL_STATE_READ,
+  MIN_SUPPORTED_TIME_LAN_SEC,
   VARTRONIC_REGISTERS,
   decodeFullState,
+  formatUnsafePollingIntervalMessage,
+  formatUnsupportedTimeLanMessage,
+  isPollingIntervalSafeForTimeLan,
 } from './register-profile';
 import type { DiscoveredDevice, GatewayScanRequest, VartronicDeviceSettings } from './types';
 
@@ -13,6 +17,12 @@ export async function probeGateway(
 ): Promise<DiscoveredDevice[]> {
   const transport = new ModbusTcpTransport(request, logger.child(`probe:${request.gatewayKey}`));
   const discovered: DiscoveredDevice[] = [];
+  const unsupportedTimeLanDevices: Array<{ modbusId: number; timeLanSec: number }> = [];
+  const unsafePollingIntervalDevices: Array<{
+    modbusId: number;
+    timeLanSec: number;
+    pollingIntervalSec: number;
+  }> = [];
 
   try {
     for (let modbusId = request.idStart; modbusId <= request.idEnd; modbusId += 1) {
@@ -29,6 +39,7 @@ export async function probeGateway(
         const settings: VartronicDeviceSettings = {
           host: request.host,
           port: request.port,
+          pollingIntervalSec: request.pollingIntervalSec,
           disableThermostatModeOnLan: false,
           forceFanControlFromNetwork: false,
         };
@@ -39,6 +50,23 @@ export async function probeGateway(
           snapshot.mode !== null;
 
         if (!isLikelyRealDevice) {
+          continue;
+        }
+
+        if (discoveredTimeLanSec < MIN_SUPPORTED_TIME_LAN_SEC) {
+          unsupportedTimeLanDevices.push({
+            modbusId,
+            timeLanSec: discoveredTimeLanSec,
+          });
+          continue;
+        }
+
+        if (!isPollingIntervalSafeForTimeLan(request.pollingIntervalSec, discoveredTimeLanSec)) {
+          unsafePollingIntervalDevices.push({
+            modbusId,
+            timeLanSec: discoveredTimeLanSec,
+            pollingIntervalSec: request.pollingIntervalSec,
+          });
           continue;
         }
 
@@ -58,6 +86,14 @@ export async function probeGateway(
     }
   } finally {
     await transport.close();
+  }
+
+  if (unsupportedTimeLanDevices.length > 0) {
+    throw new Error(formatUnsupportedTimeLanMessage(unsupportedTimeLanDevices));
+  }
+
+  if (unsafePollingIntervalDevices.length > 0) {
+    throw new Error(formatUnsafePollingIntervalMessage(unsafePollingIntervalDevices));
   }
 
   return discovered;

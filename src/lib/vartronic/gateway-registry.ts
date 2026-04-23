@@ -66,7 +66,7 @@ export class GatewayRegistry {
 
   public async cascadeGatewaySettings(
     sourceDevice: Device & ManagedVartronicDevice,
-    settingsPatch: Pick<GatewaySettings, 'host' | 'port' | 'timeLanSec'>,
+    settingsPatch: Pick<GatewaySettings, 'host' | 'port' | 'timeLanSec' | 'pollingIntervalSec'>,
   ): Promise<void> {
     const gatewayKey = sourceDevice.gatewayKey;
     if (this.cascadeLocks.has(gatewayKey)) {
@@ -85,6 +85,7 @@ export class GatewayRegistry {
           device.setSettings({
             host: settingsPatch.host,
             port: settingsPatch.port,
+            pollingIntervalSec: settingsPatch.pollingIntervalSec,
           }),
         );
 
@@ -96,6 +97,7 @@ export class GatewayRegistry {
         host: settingsPatch.host,
         port: settingsPatch.port,
         timeLanSec: settingsPatch.timeLanSec,
+        pollingIntervalSec: settingsPatch.pollingIntervalSec,
       });
     } finally {
       this.cascadeLocks.delete(gatewayKey);
@@ -109,7 +111,17 @@ export class GatewayRegistry {
   private getOrCreateManager(settings: GatewaySettings): GatewayManager {
     const existing = this.managers.get(settings.gatewayKey);
     if (existing) {
-      existing.updateGatewaySettings(settings);
+      const currentSettings = existing.getGatewaySettings();
+      const endpointChanged =
+        currentSettings.host !== settings.host ||
+        currentSettings.port !== settings.port ||
+        currentSettings.timeLanSec !== settings.timeLanSec ||
+        currentSettings.pollingIntervalSec !== settings.pollingIntervalSec;
+
+      if (endpointChanged) {
+        existing.updateGatewaySettings(settings);
+      }
+
       return existing;
     }
 

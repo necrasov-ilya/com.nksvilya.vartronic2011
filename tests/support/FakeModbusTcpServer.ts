@@ -31,6 +31,8 @@ export class FakeModbusTcpServer {
 
   private nextDropCount = 0;
 
+  private readonly unitDropCounts = new Map<number, number>();
+
   public async start(): Promise<number> {
     await new Promise<void>((resolve, reject) => {
       this.server.once('error', reject);
@@ -76,18 +78,30 @@ export class FakeModbusTcpServer {
     this.nextDropCount = count;
   }
 
+  public dropNextRequestsForUnit(unitId: number, count: number): void {
+    this.unitDropCounts.set(unitId, count);
+  }
+
   private async handleFrames(socket: net.Socket, getFrame: () => Buffer | null): Promise<void> {
     let frame: Buffer | null;
     while ((frame = getFrame())) {
-      if (this.nextDropCount > 0) {
-        this.nextDropCount -= 1;
-        socket.destroy();
-        return;
-      }
-
       const transactionId = frame.readUInt16BE(0);
       const unitId = frame.readUInt8(6);
       const functionCode = frame.readUInt8(7);
+      const unitDropCount = this.unitDropCounts.get(unitId) ?? 0;
+
+      if (this.nextDropCount > 0 || unitDropCount > 0) {
+        if (this.nextDropCount > 0) {
+          this.nextDropCount -= 1;
+        }
+
+        if (unitDropCount > 0) {
+          this.unitDropCounts.set(unitId, unitDropCount - 1);
+        }
+
+        socket.destroy();
+        return;
+      }
 
       if (functionCode === 3) {
         const address = frame.readUInt16BE(8);

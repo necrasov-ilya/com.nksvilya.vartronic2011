@@ -1,7 +1,6 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
     <style>
       body {
         font-family: sans-serif;
@@ -51,6 +50,10 @@
         Port
         <input id="port" type="number" min="1" max="65535" required />
       </label>
+      <label>
+        Polling interval, seconds
+        <input id="pollingIntervalSec" type="number" min="2" max="60" required />
+      </label>
       <button type="submit">Update gateway</button>
       <div id="error"></div>
     </form>
@@ -63,6 +66,7 @@
           document.getElementById('gatewayKey').value = configuration.gatewayKey;
           document.getElementById('host').value = configuration.host;
           document.getElementById('port').value = configuration.port;
+          document.getElementById('pollingIntervalSec').value = configuration.pollingIntervalSec;
         } catch (error) {
           errorNode.textContent = error && error.message ? error.message : 'Unable to load current settings.';
         }
@@ -75,6 +79,7 @@
         const payload = {
           host: document.getElementById('host').value.trim(),
           port: Number(document.getElementById('port').value),
+          pollingIntervalSec: Number(document.getElementById('pollingIntervalSec').value),
         };
 
         try {

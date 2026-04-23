@@ -1,3 +1,5 @@
 'use strict';
 
-module.exports = require('./.homeybuild/app.js');
+const appModule = require('./.homeybuild/app.js');
+
+module.exports = appModule.default ?? appModule;

@@ -4,10 +4,11 @@ import { PollScheduler } from './poll-scheduler';
 import { RequestQueue } from './request-queue';
 import {
   FULL_STATE_READ,
+  MIN_SUPPORTED_TIME_LAN_SEC,
   SAFE_HEARTBEAT_READ,
   VARTRONIC_REGISTERS,
-  decodeAlarmHeartbeat,
   decodeFullState,
+  decodeHeartbeatState,
   encodeFanMode,
   encodeMode,
   encodeTemperature,
@@ -16,7 +17,6 @@ import {
 import { diffDesiredState } from './resync-policy';
 import type {
   DeviceSnapshot,
-  GatewayAvailability,
   GatewaySettings,
   ManagedVartronicDevice,
   TimerHost,
@@ -27,7 +27,9 @@ import type {
 const WRITE_PRIORITY = 1;
 const FULL_REFRESH_PRIORITY = 10;
 const HEARTBEAT_PRIORITY = 20;
-const FULL_REFRESH_EVERY_SUCCESSFUL_WINDOWS = 5;
+const DEVICE_FAILURE_THRESHOLD = 3;
+const POLLING_UNSTABLE_WARNING =
+  `Polling is unstable. Verify every controller TimeLan is at least ${MIN_SUPPORTED_TIME_LAN_SEC}s and that the gateway responds reliably.`;
 
 interface DebouncedTemperatureWrite {
   timeout: NodeJS.Timeout;
@@ -52,17 +54,9 @@ export class GatewayManager {
 
   private readonly transport: ModbusTcpTransport;
 
-  private reconnectAttempt = 0;
-
-  private nextReconnectAt = 0;
-
-  private failedWindows = 0;
-
-  private successfulWindows = 0;
-
   private roundRobinCursor = 0;
 
-  private pendingFullRefresh = true;
+  private readonly failedHeartbeatsByDeviceId = new Map<string, number>();
 
   public constructor(
     private settings: GatewaySettings,
@@ -70,19 +64,19 @@ export class GatewayManager {
     private readonly logger: VartronicLogger,
   ) {
     this.transport = new ModbusTcpTransport(this.settings, logger.child(`gateway:${settings.gatewayKey}`));
-    this.scheduler = new PollScheduler(timerHost, this, () => this.getHeartbeatWindowMs());
+    this.scheduler = new PollScheduler(timerHost, this, () => this.getPollingIntervalMs());
   }
 
   public attachDevice(device: ManagedVartronicDevice): void {
     this.devices.set(device.deviceId, device);
     this.scheduler.start();
-    this.pendingFullRefresh = true;
     this.scheduler.triggerSoon();
   }
 
   public async detachDevice(deviceId: string): Promise<void> {
     this.devices.delete(deviceId);
     this.snapshots.delete(deviceId);
+    this.failedHeartbeatsByDeviceId.delete(deviceId);
 
     const pending = this.debouncedSetpoints.get(deviceId);
     if (pending) {
@@ -120,7 +114,6 @@ export class GatewayManager {
   public updateGatewaySettings(settings: GatewaySettings): void {
     this.settings = settings;
     this.transport.updateSettings(settings);
-    this.pendingFullRefresh = true;
     this.scheduler.triggerSoon();
   }
 
@@ -220,7 +213,7 @@ export class GatewayManager {
       await this.performWrite(
         device.modbusId,
         VARTRONIC_REGISTERS.HEAT_CHILL,
-        encodeMode(mode, device.getProtocolSettings()),
+        encodeMode(mode, device.getProtocolSettings(), this.getEffectiveFanMode(device)),
       );
       await this.refreshDevice(device);
     }, { label: `mode:${device.modbusId}`, priority: WRITE_PRIORITY });
@@ -228,7 +221,16 @@ export class GatewayManager {
 
   public async writeFanMode(device: ManagedVartronicDevice, fanMode: VartronicFanMode): Promise<void> {
     await this.requestQueue.enqueue(async () => {
-      await this.performWrite(device.modbusId, VARTRONIC_REGISTERS.UST_FAN, encodeFanMode(fanMode));
+      await this.performWrite(
+        device.modbusId,
+        VARTRONIC_REGISTERS.HEAT_CHILL,
+        encodeMode(this.getEffectiveMode(device), device.getProtocolSettings(), fanMode),
+      );
+
+      if (fanMode !== 'auto') {
+        await this.performWrite(device.modbusId, VARTRONIC_REGISTERS.UST_FAN, encodeFanMode(fanMode));
+      }
+
       await this.refreshDevice(device);
     }, { label: `fan:${device.modbusId}`, priority: WRITE_PRIORITY });
   }
@@ -246,71 +248,42 @@ export class GatewayManager {
     }
 
     const startedAt = Date.now();
-    const runFullRefresh = this.pendingFullRefresh
-      || (this.successfulWindows + 1) % FULL_REFRESH_EVERY_SUCCESSFUL_WINDOWS === 0;
-    let failed = false;
+    const pollingIntervalMs = this.getPollingIntervalMs();
+    const heartbeatSuccessfulDeviceIds = new Set<string>();
+    let hadHeartbeatFailure = false;
 
     for (const device of orderedDevices) {
-      try {
-        await this.requestQueue.enqueue(async () => {
-          const heartbeat = await this.readHeartbeat(device);
-          await device.updateSnapshot(heartbeat);
-          this.snapshots.set(device.deviceId, heartbeat);
+      if (await this.handleUnsupportedTimeLanIfNeeded(device)) {
+        continue;
+      }
 
-          if (runFullRefresh) {
-            await this.refreshDevice(device);
-          }
-        }, { label: `heartbeat:${device.modbusId}`, priority: HEARTBEAT_PRIORITY });
+      try {
+        const heartbeat = await this.requestQueue.enqueue(async () => this.readHeartbeat(device), {
+          label: `heartbeat:${device.modbusId}`,
+          priority: HEARTBEAT_PRIORITY,
+        });
+        await this.handleHeartbeatSuccess(device, heartbeat);
+        heartbeatSuccessfulDeviceIds.add(device.deviceId);
       } catch (error) {
-        failed = true;
-        this.logger.warn(`Heartbeat failed for device ${device.modbusId}`, error);
+        hadHeartbeatFailure = true;
+        await this.handleHeartbeatFailure(device, error);
       }
     }
 
     const elapsed = Date.now() - startedAt;
+    const windowExceeded = elapsed > pollingIntervalMs;
 
-    if (!failed && elapsed <= this.getHeartbeatWindowMs()) {
-      this.failedWindows = 0;
-      this.successfulWindows += 1;
-      this.pendingFullRefresh = false;
-      await this.broadcastAvailability({
+    await Promise.all(orderedDevices
+      .filter(device => heartbeatSuccessfulDeviceIds.has(device.deviceId))
+      .map(device => device.handleGatewayAvailability({
         online: true,
-        warning: null,
-      });
-      return;
-    }
+        warning: windowExceeded || hadHeartbeatFailure ? POLLING_UNSTABLE_WARNING : null,
+      })));
 
-    this.failedWindows += 1;
-    const reason = failed
-      ? 'Gateway polling failed.'
-      : `Gateway polling exceeded the ${this.getHeartbeatWindowMs()}ms heartbeat window.`;
-    const warning =
-      'Polling is unstable. Increase the controller TimeLan or reduce the number of paired devices on this gateway.';
-
-    if (this.failedWindows >= 3) {
-      await this.broadcastAvailability({
-        online: false,
-        reason,
-        warning,
-      });
-    } else {
-      await this.broadcastAvailability({
-        online: true,
-        warning,
-      });
-    }
   }
 
-  private getHeartbeatWindowMs(): number {
-    const knownTimeLanValues = Array.from(this.devices.values())
-      .map(device => this.snapshots.get(device.deviceId)?.timeLanSec ?? device.getGatewaySettings().timeLanSec)
-      .filter((value): value is number => Number.isInteger(value) && value > 0);
-
-    const effectiveTimeLanSec = knownTimeLanValues.length > 0
-      ? Math.min(...knownTimeLanValues)
-      : this.settings.timeLanSec;
-
-    return Math.max(700, effectiveTimeLanSec * 700);
+  private getPollingIntervalMs(): number {
+    return Math.max(1_000, this.settings.pollingIntervalSec * 1_000);
   }
 
   private getOrderedDevices(): ManagedVartronicDevice[] {
@@ -324,12 +297,78 @@ export class GatewayManager {
     return [...devices.slice(start), ...devices.slice(0, start)];
   }
 
+  private async handleUnsupportedTimeLanIfNeeded(device: ManagedVartronicDevice): Promise<boolean> {
+    const timeLanSec = this.getConfirmedTimeLanSec(device);
+    if (timeLanSec === null || timeLanSec >= MIN_SUPPORTED_TIME_LAN_SEC) {
+      return false;
+    }
+
+    this.failedHeartbeatsByDeviceId.delete(device.deviceId);
+
+    await device.handleGatewayAvailability({
+      online: false,
+      reason: 'Unsupported TimeLan configuration.',
+      warning: `Device ${device.modbusId} has TimeLan=${timeLanSec}s. Set TimeLan to at least ${MIN_SUPPORTED_TIME_LAN_SEC}s.`,
+    });
+
+    return true;
+  }
+
+  private async handleHeartbeatSuccess(device: ManagedVartronicDevice, heartbeat: DeviceSnapshot): Promise<void> {
+    await device.updateSnapshot(heartbeat);
+    this.snapshots.set(device.deviceId, heartbeat);
+    this.failedHeartbeatsByDeviceId.delete(device.deviceId);
+  }
+
+  private async handleHeartbeatFailure(device: ManagedVartronicDevice, error: unknown): Promise<void> {
+    const failedHeartbeats = (this.failedHeartbeatsByDeviceId.get(device.deviceId) ?? 0) + 1;
+    this.failedHeartbeatsByDeviceId.set(device.deviceId, failedHeartbeats);
+    this.logger.warn(`Heartbeat failed for device ${device.modbusId}`, error);
+
+    if (failedHeartbeats >= DEVICE_FAILURE_THRESHOLD) {
+      await device.handleGatewayAvailability({
+        online: false,
+        reason: `Device ${device.modbusId} did not respond for ${failedHeartbeats} polling windows.`,
+        warning: POLLING_UNSTABLE_WARNING,
+      });
+      return;
+    }
+
+    await device.handleGatewayAvailability({
+      online: true,
+      warning: POLLING_UNSTABLE_WARNING,
+    });
+  }
+
+  private getEffectiveMode(device: ManagedVartronicDevice): VartronicMode {
+    return this.snapshots.get(device.deviceId)?.mode ??
+      device.getDesiredState().mode ??
+      device.getLastActualState()?.mode ??
+      'heat';
+  }
+
+  private getEffectiveFanMode(device: ManagedVartronicDevice): VartronicFanMode | null {
+    return device.getDesiredState().fanMode ??
+      this.snapshots.get(device.deviceId)?.fanMode ??
+      device.getLastActualState()?.fanMode ??
+      null;
+  }
+
+  private getConfirmedTimeLanSec(device: ManagedVartronicDevice): number | null {
+    const snapshotValue = this.snapshots.get(device.deviceId)?.timeLanSec;
+    if (typeof snapshotValue === 'number' && Number.isInteger(snapshotValue) && snapshotValue > 0) {
+      return snapshotValue;
+    }
+
+    return null;
+  }
+
   private async readHeartbeat(device: ManagedVartronicDevice): Promise<DeviceSnapshot> {
     const raw = await this.withTransport(() =>
       this.transport.readHoldingRegisters(device.modbusId, SAFE_HEARTBEAT_READ.address, SAFE_HEARTBEAT_READ.count),
     );
 
-    return decodeAlarmHeartbeat(raw[0], this.snapshots.get(device.deviceId) ?? null);
+    return decodeHeartbeatState(raw, this.snapshots.get(device.deviceId) ?? device.getLastActualState());
   }
 
   private async refreshDevice(device: ManagedVartronicDevice): Promise<void> {
@@ -359,11 +398,19 @@ export class GatewayManager {
       await this.performWrite(
         device.modbusId,
         VARTRONIC_REGISTERS.HEAT_CHILL,
-        encodeMode(drift.mode, device.getProtocolSettings()),
+        encodeMode(drift.mode, device.getProtocolSettings(), drift.fanMode ?? this.getEffectiveFanMode(device)),
       );
     }
 
-    if (drift.fanMode) {
+    if (!drift.mode && drift.fanMode) {
+      await this.performWrite(
+        device.modbusId,
+        VARTRONIC_REGISTERS.HEAT_CHILL,
+        encodeMode(this.getEffectiveMode(device), device.getProtocolSettings(), drift.fanMode),
+      );
+    }
+
+    if (drift.fanMode && drift.fanMode !== 'auto') {
       await this.performWrite(device.modbusId, VARTRONIC_REGISTERS.UST_FAN, encodeFanMode(drift.fanMode));
     }
 
@@ -379,7 +426,6 @@ export class GatewayManager {
 
   private async performWrite(unitId: number, address: number, value: number): Promise<void> {
     await this.withTransport(() => this.transport.writeSingleRegister(unitId, address, value));
-    this.pendingFullRefresh = true;
   }
 
   private scheduleTemperatureWrite(
@@ -403,28 +449,11 @@ export class GatewayManager {
   }
 
   private async withTransport<T>(operation: () => Promise<T>): Promise<T> {
-    const now = Date.now();
-
-    if (now < this.nextReconnectAt) {
-      throw new Error(`Reconnect backoff is active until ${new Date(this.nextReconnectAt).toISOString()}.`);
-    }
-
     try {
-      const result = await operation();
-      this.reconnectAttempt = 0;
-      return result;
+      return await operation();
     } catch (error) {
       await this.transport.close();
-      this.reconnectAttempt += 1;
-      const backoffMs = Math.min(30_000, 1_000 * 2 ** (this.reconnectAttempt - 1));
-      const jitterMs = Math.min(250, this.reconnectAttempt * 25);
-      this.nextReconnectAt = Date.now() + backoffMs + jitterMs;
-      this.pendingFullRefresh = true;
       throw error;
     }
-  }
-
-  private async broadcastAvailability(availability: GatewayAvailability): Promise<void> {
-    await Promise.all(Array.from(this.devices.values()).map(device => device.handleGatewayAvailability(availability)));
   }
 }

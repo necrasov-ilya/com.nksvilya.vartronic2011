@@ -1,4 +1,5 @@
-import Homey, { type FlowCardTriggerDevice } from 'homey';
+import * as Homey from 'homey';
+import type { FlowCardTriggerDevice } from 'homey';
 
 import { GatewayRegistry } from './lib/vartronic/gateway-registry';
 import { VartronicLogger } from './lib/vartronic/logger';
@@ -6,7 +7,7 @@ import type { VartronicConvectorDevice } from './drivers/vartronic_convector/dev
 import { normalizeExternalTemperature } from './lib/vartronic/register-profile';
 import type { VartronicFanMode, VartronicMode } from './lib/vartronic/types';
 
-export default class VartronicApp extends Homey.App {
+class VartronicApp extends Homey.App {
   private logger!: VartronicLogger;
 
   private gatewayRegistry!: GatewayRegistry;
@@ -15,11 +16,17 @@ export default class VartronicApp extends Homey.App {
 
   private connectionRestoredTrigger!: FlowCardTriggerDevice;
 
+  private heatValveOpenedTrigger!: FlowCardTriggerDevice;
+
+  private heatValveClosedTrigger!: FlowCardTriggerDevice;
+
   public async onInit(): Promise<void> {
     this.logger = new VartronicLogger(this);
     this.gatewayRegistry = new GatewayRegistry(this.homey, this.logger);
     this.connectionLostTrigger = this.homey.flow.getDeviceTriggerCard('connection_lost');
     this.connectionRestoredTrigger = this.homey.flow.getDeviceTriggerCard('connection_restored');
+    this.heatValveOpenedTrigger = this.homey.flow.getDeviceTriggerCard('heat_valve_opened');
+    this.heatValveClosedTrigger = this.homey.flow.getDeviceTriggerCard('heat_valve_closed');
     this.registerFlowCards();
     this.log('Vartronic app initialized.');
   }
@@ -60,7 +67,7 @@ export default class VartronicApp extends Homey.App {
 
   public async cascadeGatewaySettings(
     device: VartronicConvectorDevice,
-    payload: { host: string; port: number; timeLanSec: number },
+    payload: { host: string; port: number; timeLanSec: number; pollingIntervalSec: number },
   ): Promise<void> {
     await this.gatewayRegistry.cascadeGatewaySettings(device, payload);
   }
@@ -71,6 +78,14 @@ export default class VartronicApp extends Homey.App {
 
   public async triggerConnectionRestored(device: VartronicConvectorDevice): Promise<void> {
     await this.connectionRestoredTrigger.trigger(device);
+  }
+
+  public async triggerHeatValveOpened(device: VartronicConvectorDevice): Promise<void> {
+    await this.heatValveOpenedTrigger.trigger(device);
+  }
+
+  public async triggerHeatValveClosed(device: VartronicConvectorDevice): Promise<void> {
+    await this.heatValveClosedTrigger.trigger(device);
   }
 
   private registerFlowCards(): void {
@@ -109,5 +124,12 @@ export default class VartronicApp extends Homey.App {
     this.homey.flow
       .getConditionCard('is_online')
       .registerRunListener(async args => (args.device as VartronicConvectorDevice).isOnline());
+
+    this.homey.flow
+      .getConditionCard('heat_valve_is_open')
+      .registerRunListener(async args => (args.device as VartronicConvectorDevice).isHeatValveOpen());
   }
 }
+
+export default VartronicApp;
+module.exports = VartronicApp;

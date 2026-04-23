@@ -1,6 +1,8 @@
-import Homey, { type Device as HomeyDevice, type PairSession } from 'homey';
+import * as Homey from 'homey';
+import type { Device as HomeyDevice, PairSession } from 'homey';
 
 import type VartronicApp from '../../app';
+import { DEFAULT_POLLING_INTERVAL_SEC, normalizePollingIntervalSec } from '../../lib/vartronic/register-profile';
 import type { GatewayScanRequest, VartronicDeviceData, VartronicDeviceSettings } from '../../lib/vartronic/types';
 import type { VartronicConvectorDevice } from './device';
 
@@ -12,6 +14,9 @@ function normalizePairingRequest(payload: unknown): GatewayScanRequest {
   const port = Number(data.port);
   const idStart = Number(data.idStart);
   const idEnd = Number(data.idEnd);
+  const pollingIntervalSec = normalizePollingIntervalSec(
+    Number(data.pollingIntervalSec ?? DEFAULT_POLLING_INTERVAL_SEC),
+  );
 
   if (!gatewayKey) {
     throw new Error('Gateway key is required.');
@@ -35,10 +40,11 @@ function normalizePairingRequest(payload: unknown): GatewayScanRequest {
     port,
     idStart,
     idEnd,
+    pollingIntervalSec,
   };
 }
 
-export default class VartronicConvectorDriver extends Homey.Driver {
+class VartronicConvectorDriver extends Homey.Driver {
   public async onPair(session: PairSession): Promise<void> {
     const app = this.homey.app as VartronicApp;
     let request: GatewayScanRequest | null = null;
@@ -110,6 +116,7 @@ export default class VartronicConvectorDriver extends Homey.Driver {
         gatewayKey: data.gatewayKey,
         host: settings.host,
         port: settings.port,
+        pollingIntervalSec: settings.pollingIntervalSec ?? DEFAULT_POLLING_INTERVAL_SEC,
       };
     });
 
@@ -132,7 +139,11 @@ export default class VartronicConvectorDriver extends Homey.Driver {
         host: normalized.host,
         port: normalized.port,
         timeLanSec: currentDevice.snapshot.timeLanSec,
+        pollingIntervalSec: normalized.pollingIntervalSec,
       });
     });
   }
 }
+
+export default VartronicConvectorDriver;
+module.exports = VartronicConvectorDriver;

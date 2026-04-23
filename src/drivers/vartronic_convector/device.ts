@@ -1,6 +1,7 @@
-import Homey from 'homey';
+import * as Homey from 'homey';
 
 import type VartronicApp from '../../app';
+import { DEFAULT_POLLING_INTERVAL_SEC, normalizePollingIntervalSec } from '../../lib/vartronic/register-profile';
 import type {
   DesiredState,
   DeviceSnapshot,
@@ -17,6 +18,7 @@ import type {
 const DESIRED_STATE_STORE_KEY = 'desiredState';
 const LAST_ACTUAL_STATE_STORE_KEY = 'lastActualState';
 const ONLINE_STORE_KEY = 'online';
+const HEAT_VALVE_CAPABILITY_ID = 'vartronic_heat_valve_open';
 
 export class VartronicConvectorDevice extends Homey.Device implements ManagedVartronicDevice {
   public get deviceId(): string {
@@ -32,6 +34,8 @@ export class VartronicConvectorDevice extends Homey.Device implements ManagedVar
   }
 
   public async onInit(): Promise<void> {
+    await this.ensureCapability(HEAT_VALVE_CAPABILITY_ID);
+
     this.registerCapabilityListener('target_temperature', async value => {
       await this.setDesiredState({ targetTemperature: Number(value) });
       await (this.homey.app as VartronicApp).writeTargetTemperature(this, Number(value));
@@ -59,22 +63,31 @@ export class VartronicConvectorDevice extends Homey.Device implements ManagedVar
     newSettings: Record<string, unknown>;
     changedKeys: string[];
   }): Promise<string | void> {
-    const changedGatewayKeys = ['host', 'port'].filter(key => event.changedKeys.includes(key));
-    const currentTimeLanSec = this.requireTimeLanSec();
+    const changedGatewayKeys = ['host', 'port', 'pollingIntervalSec'].filter(key => event.changedKeys.includes(key));
     if (changedGatewayKeys.length > 0) {
+      const currentTimeLanSec = this.requireTimeLanSec();
       const app = this.homey.app as VartronicApp;
       if (!app.getRegistry().isCascadeLocked(this.gatewayKey)) {
         await app.cascadeGatewaySettings(this, {
           host: String(event.newSettings.host),
           port: Number(event.newSettings.port),
           timeLanSec: currentTimeLanSec,
+          pollingIntervalSec: normalizePollingIntervalSec(
+            Number(event.newSettings.pollingIntervalSec ?? DEFAULT_POLLING_INTERVAL_SEC),
+          ),
         });
       }
 
       return 'Gateway settings were updated for all devices on the same gateway key.';
     }
 
-    await (this.homey.app as VartronicApp).resyncDevice(this);
+    if (
+      event.changedKeys.includes('disableThermostatModeOnLan') ||
+      event.changedKeys.includes('forceFanControlFromNetwork')
+    ) {
+      return 'Protocol settings were saved. They will be applied on the next mode or fan write.';
+    }
+
     return undefined;
   }
 
@@ -84,6 +97,9 @@ export class VartronicConvectorDevice extends Homey.Device implements ManagedVar
       gatewayKey: this.gatewayKey,
       host: settings.host,
       port: settings.port,
+      pollingIntervalSec: normalizePollingIntervalSec(
+        Number(settings.pollingIntervalSec ?? DEFAULT_POLLING_INTERVAL_SEC),
+      ),
       timeLanSec: this.requireTimeLanSec(),
     };
   }
@@ -101,16 +117,59 @@ export class VartronicConvectorDevice extends Homey.Device implements ManagedVar
   }
 
   public async updateSnapshot(snapshot: DeviceSnapshot): Promise<void> {
-    await this.setStoreValue(LAST_ACTUAL_STATE_STORE_KEY, snapshot);
+    const previous = this.getLastActualState();
+    const nextSnapshot: DeviceSnapshot = {
+      ...snapshot,
+      targetTemperature: snapshot.targetTemperature ?? previous?.targetTemperature ?? null,
+      measureTemperature: snapshot.measureTemperature ?? previous?.measureTemperature ?? null,
+      heatValveOpen: snapshot.heatValveOpen ?? previous?.heatValveOpen ?? null,
+      mode: snapshot.mode ?? previous?.mode ?? null,
+      fanMode: snapshot.fanMode ?? previous?.fanMode ?? null,
+      fanPercent: snapshot.fanPercent ?? previous?.fanPercent ?? null,
+      timeLanSec: snapshot.timeLanSec ?? previous?.timeLanSec ?? null,
+    };
+
+    await this.setStoreValue(LAST_ACTUAL_STATE_STORE_KEY, nextSnapshot);
     await this.setStoreValue(ONLINE_STORE_KEY, true);
 
-    await Promise.all([
-      this.setCapabilityValue('measure_temperature', snapshot.measureTemperature).catch(this.error),
-      this.setCapabilityValue('target_temperature', snapshot.targetTemperature).catch(this.error),
-      this.setCapabilityValue('alarm_generic', snapshot.alarmActive).catch(this.error),
-      snapshot.mode ? this.setCapabilityValue('vartronic_mode', snapshot.mode).catch(this.error) : Promise.resolve(),
-      snapshot.fanMode ? this.setCapabilityValue('vartronic_fan_mode', snapshot.fanMode).catch(this.error) : Promise.resolve(),
-    ]);
+    const updates = [
+      this.setCapabilityValue('alarm_generic', nextSnapshot.alarmActive).catch(this.error),
+    ];
+
+    if (typeof nextSnapshot.measureTemperature === 'number') {
+      updates.push(this.setCapabilityValue('measure_temperature', nextSnapshot.measureTemperature).catch(this.error));
+    }
+
+    if (typeof nextSnapshot.targetTemperature === 'number') {
+      updates.push(this.setCapabilityValue('target_temperature', nextSnapshot.targetTemperature).catch(this.error));
+    }
+
+    if (typeof nextSnapshot.heatValveOpen === 'boolean') {
+      updates.push(this.setCapabilityValue(HEAT_VALVE_CAPABILITY_ID, nextSnapshot.heatValveOpen).catch(this.error));
+    }
+
+    if (nextSnapshot.mode) {
+      updates.push(this.setCapabilityValue('vartronic_mode', nextSnapshot.mode).catch(this.error));
+    }
+
+    if (nextSnapshot.fanMode) {
+      updates.push(this.setCapabilityValue('vartronic_fan_mode', nextSnapshot.fanMode).catch(this.error));
+    }
+
+    await Promise.all(updates);
+
+    if (
+      typeof previous?.heatValveOpen === 'boolean' &&
+      typeof nextSnapshot.heatValveOpen === 'boolean' &&
+      previous.heatValveOpen !== nextSnapshot.heatValveOpen
+    ) {
+      const app = this.homey.app as VartronicApp;
+      if (nextSnapshot.heatValveOpen) {
+        await app.triggerHeatValveOpened(this);
+      } else {
+        await app.triggerHeatValveClosed(this);
+      }
+    }
   }
 
   public async handleGatewayAvailability(availability: GatewayAvailability): Promise<void> {
@@ -147,7 +206,7 @@ export class VartronicConvectorDevice extends Homey.Device implements ManagedVar
     await this.setStoreValue(DESIRED_STATE_STORE_KEY, nextState);
   }
 
-  private getLastActualState(): DeviceSnapshot | null {
+  public getLastActualState(): DeviceSnapshot | null {
     return this.getStoreValue<DeviceSnapshot>(LAST_ACTUAL_STATE_STORE_KEY);
   }
 
@@ -167,6 +226,17 @@ export class VartronicConvectorDevice extends Homey.Device implements ManagedVar
   public isOnline(): boolean {
     return Boolean(this.getStoreValue<boolean>(ONLINE_STORE_KEY));
   }
+
+  public isHeatValveOpen(): boolean {
+    return Boolean(this.getCapabilityValue<boolean>(HEAT_VALVE_CAPABILITY_ID));
+  }
+
+  private async ensureCapability(capabilityId: string): Promise<void> {
+    if (!this.hasCapability(capabilityId)) {
+      await this.addCapability(capabilityId);
+    }
+  }
 }
 
 export default VartronicConvectorDevice;
+module.exports = VartronicConvectorDevice;

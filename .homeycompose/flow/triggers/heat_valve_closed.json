@@ -1,0 +1,12 @@
+{
+  "title": {
+    "en": "Heating valve closed"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=vartronic_convector"
+    }
+  ]
+}

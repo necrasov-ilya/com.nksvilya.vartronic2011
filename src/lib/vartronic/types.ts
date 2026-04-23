@@ -10,6 +10,7 @@ export interface GatewayEndpoint {
 export interface GatewaySettings extends GatewayEndpoint {
   gatewayKey: string;
   timeLanSec: number;
+  pollingIntervalSec: number;
 }
 
 export interface ProtocolSettings {
@@ -20,6 +21,7 @@ export interface ProtocolSettings {
 export interface VartronicDeviceSettings extends ProtocolSettings {
   host: string;
   port: number;
+  pollingIntervalSec: number;
 }
 
 export interface VartronicDeviceData {
@@ -40,6 +42,7 @@ export interface DeviceSnapshot {
   targetTemperature: number | null;
   measureTemperature: number | null;
   alarmActive: boolean;
+  heatValveOpen: boolean | null;
   mode: VartronicMode | null;
   fanMode: VartronicFanMode | null;
   fanPercent: number | null;
@@ -59,6 +62,7 @@ export interface ManagedVartronicDevice {
   getGatewaySettings(): GatewaySettings;
   getProtocolSettings(): ProtocolSettings;
   getDesiredState(): DesiredState;
+  getLastActualState(): DeviceSnapshot | null;
   updateSnapshot(snapshot: DeviceSnapshot): Promise<void>;
   handleGatewayAvailability(availability: GatewayAvailability): Promise<void>;
 }
@@ -67,6 +71,7 @@ export interface GatewayScanRequest extends GatewayEndpoint {
   gatewayKey: string;
   idStart: number;
   idEnd: number;
+  pollingIntervalSec: number;
 }
 
 export interface DiscoveredDevice {

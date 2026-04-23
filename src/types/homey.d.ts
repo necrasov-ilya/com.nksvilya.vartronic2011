@@ -67,6 +67,8 @@ declare module 'homey' {
     setSettings(settings: Record<string, unknown>): Promise<void>;
     getStoreValue<T = unknown>(key: string): T | null;
     setStoreValue(key: string, value: unknown): Promise<void>;
+    hasCapability(capabilityId: string): boolean;
+    addCapability(capabilityId: string): Promise<void>;
     registerCapabilityListener(
       capabilityId: string,
       listener: (value: unknown) => Promise<void> | void,

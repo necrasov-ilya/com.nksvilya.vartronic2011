@@ -47,6 +47,10 @@ export class FakeManagedDevice implements ManagedVartronicDevice {
     return this.desiredState;
   }
 
+  public getLastActualState(): DeviceSnapshot | null {
+    return this.snapshots.at(-1) ?? null;
+  }
+
   public setDesiredState(next: DesiredState): void {
     this.desiredState = next;
   }

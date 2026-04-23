@@ -1,0 +1,17 @@
+{
+  "title": {
+    "en": "Heating valve"
+  },
+  "type": "boolean",
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "icon": "/assets/capabilities/vartronic_heat_valve_open.svg",
+  "insights": true,
+  "insightsTitleTrue": {
+    "en": "Heating valve opened"
+  },
+  "insightsTitleFalse": {
+    "en": "Heating valve closed"
+  }
+}

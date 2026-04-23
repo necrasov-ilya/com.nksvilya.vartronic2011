@@ -11,7 +11,8 @@ Highlights:
 
 Before installing:
 - verify the gateway host, port, and Modbus IDs
-- confirm the controllers return a valid TimeLan value
+- set TimeLan to at least 10 seconds on every controller in the paired range
+- choose a polling interval no greater than half of the lowest controller TimeLan
 - run `npm run build` before `homey app run` or `homey app install`
 
 External temperature:

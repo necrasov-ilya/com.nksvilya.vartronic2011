@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "Heating valve is open"
+  },
+  "titleFormatted": {
+    "en": "[[device]] heating valve is open"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=vartronic_convector"
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
     <style>
       body {
         font-family: sans-serif;
@@ -55,16 +54,23 @@
         End Modbus ID
         <input id="idEnd" type="number" min="1" max="247" required value="23" />
       </label>
-      <button type="submit">Scan devices</button>
+      <label>
+        Polling interval, seconds
+        <input id="pollingIntervalSec" type="number" min="2" max="60" required value="5" />
+      </label>
+      <button id="scan-button" type="submit">Scan devices</button>
       <div id="error"></div>
     </form>
     <script>
       const form = document.getElementById('gateway-form');
       const errorNode = document.getElementById('error');
+      const scanButton = document.getElementById('scan-button');
 
       form.addEventListener('submit', async event => {
         event.preventDefault();
         errorNode.textContent = '';
+        scanButton.disabled = true;
+        scanButton.textContent = 'Scanning...';
 
         const payload = {
           gatewayKey: document.getElementById('gatewayKey').value.trim(),
@@ -72,13 +78,17 @@
           port: Number(document.getElementById('port').value),
           idStart: Number(document.getElementById('idStart').value),
           idEnd: Number(document.getElementById('idEnd').value),
+          pollingIntervalSec: Number(document.getElementById('pollingIntervalSec').value),
         };
 
         try {
-          await Homey.emit('validate_gateway', payload);
+          const result = await Homey.emit('validate_gateway', payload);
+          errorNode.textContent = `Found ${result.count} device(s).`;
           Homey.showView('list_devices');
         } catch (error) {
           errorNode.textContent = error && error.message ? error.message : 'Validation failed.';
+          scanButton.disabled = false;
+          scanButton.textContent = 'Scan devices';
         }
       });
     </script>

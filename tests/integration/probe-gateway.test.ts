@@ -13,7 +13,7 @@ describe('probeGateway', () => {
       [VARTRONIC_REGISTERS.HEAT_CHILL]: 1,
       [VARTRONIC_REGISTERS.UST_FAN]: 33,
       [VARTRONIC_REGISTERS.TMP_OUT]: 210,
-      [VARTRONIC_REGISTERS.TIME_LAN]: 4,
+      [VARTRONIC_REGISTERS.TIME_LAN]: 10,
       [VARTRONIC_REGISTERS.ALARM]: 0,
     });
 
@@ -22,7 +22,7 @@ describe('probeGateway', () => {
       [VARTRONIC_REGISTERS.HEAT_CHILL]: 2,
       [VARTRONIC_REGISTERS.UST_FAN]: 66,
       [VARTRONIC_REGISTERS.TMP_OUT]: 205,
-      [VARTRONIC_REGISTERS.TIME_LAN]: 6,
+      [VARTRONIC_REGISTERS.TIME_LAN]: 12,
       [VARTRONIC_REGISTERS.ALARM]: 1,
     });
 
@@ -33,6 +33,7 @@ describe('probeGateway', () => {
         port,
         idStart: 16,
         idEnd: 18,
+        pollingIntervalSec: 5,
       },
       new VartronicLogger(console),
     );
@@ -46,8 +47,64 @@ describe('probeGateway', () => {
         port,
       },
     });
-    expect(devices[0].snapshot.timeLanSec).toBe(4);
+    expect(devices[0].snapshot.timeLanSec).toBe(10);
     expect(devices[1].snapshot.alarmActive).toBe(true);
+
+    await server.stop();
+  });
+
+  it('rejects responsive devices whose TimeLan is below the supported minimum', async () => {
+    const server = new FakeModbusTcpServer();
+    const port = await server.start();
+
+    server.seedRegisters(16, {
+      [VARTRONIC_REGISTERS.UST_TMP]: 225,
+      [VARTRONIC_REGISTERS.HEAT_CHILL]: 1,
+      [VARTRONIC_REGISTERS.UST_FAN]: 33,
+      [VARTRONIC_REGISTERS.TMP_OUT]: 210,
+      [VARTRONIC_REGISTERS.TIME_LAN]: 4,
+      [VARTRONIC_REGISTERS.ALARM]: 0,
+    });
+
+    await expect(probeGateway(
+      {
+        gatewayKey: 'default',
+        host: '127.0.0.1',
+        port,
+        idStart: 16,
+        idEnd: 16,
+        pollingIntervalSec: 5,
+      },
+      new VartronicLogger(console),
+    )).rejects.toThrow('device 16: TimeLan=4s');
+
+    await server.stop();
+  });
+
+  it('rejects polling intervals that are too close to controller TimeLan', async () => {
+    const server = new FakeModbusTcpServer();
+    const port = await server.start();
+
+    server.seedRegisters(16, {
+      [VARTRONIC_REGISTERS.UST_TMP]: 225,
+      [VARTRONIC_REGISTERS.HEAT_CHILL]: 1,
+      [VARTRONIC_REGISTERS.UST_FAN]: 33,
+      [VARTRONIC_REGISTERS.TMP_OUT]: 210,
+      [VARTRONIC_REGISTERS.TIME_LAN]: 10,
+      [VARTRONIC_REGISTERS.ALARM]: 0,
+    });
+
+    await expect(probeGateway(
+      {
+        gatewayKey: 'default',
+        host: '127.0.0.1',
+        port,
+        idStart: 16,
+        idEnd: 16,
+        pollingIntervalSec: 6,
+      },
+      new VartronicLogger(console),
+    )).rejects.toThrow('polling interval=6s');
 
     await server.stop();
   });

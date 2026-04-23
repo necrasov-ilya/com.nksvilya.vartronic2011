@@ -55,12 +55,14 @@ describe('gateway registry', () => {
       host: '192.168.1.9',
       port: 1502,
       timeLanSec: 5,
+      pollingIntervalSec: 2,
     });
 
     expect(applied).toHaveLength(2);
     expect(applied[0]).toEqual({
       host: '192.168.1.9',
       port: 1502,
+      pollingIntervalSec: 2,
     });
   });
 });

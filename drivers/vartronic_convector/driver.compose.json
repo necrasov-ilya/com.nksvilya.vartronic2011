@@ -10,6 +10,7 @@
     "target_temperature",
     "measure_temperature",
     "alarm_generic",
+    "vartronic_heat_valve_open",
     "vartronic_mode",
     "vartronic_fan_mode"
   ],
@@ -26,10 +27,7 @@
   },
   "pair": [
     {
-      "id": "configure_gateway",
-      "navigation": {
-        "next": "list_devices"
-      }
+      "id": "configure_gateway"
     },
     {
       "id": "list_devices",
@@ -67,13 +65,24 @@
       }
     },
     {
+      "id": "pollingIntervalSec",
+      "type": "number",
+      "label": {
+        "en": "Polling interval"
+      },
+      "hint": {
+        "en": "Heartbeat interval in seconds for all devices on this gateway. Keep it no greater than half of the lowest controller TimeLan."
+      },
+      "value": 5
+    },
+    {
       "id": "disableThermostatModeOnLan",
       "type": "checkbox",
       "label": {
-        "en": "Disable thermostat mode on LAN writes"
+        "en": "Force fan-off flag on mode writes"
       },
       "hint": {
-        "en": "Sets the 0x0100 flag in HeatChill writes for installations that should not use thermostat mode on LAN."
+        "en": "Sets the 0x0100 HeatChill fan-disable flag. Usually leave this off and use Fan mode Off instead."
       },
       "value": false
     },
@@ -84,7 +93,7 @@
         "en": "Force fan speed from network"
       },
       "hint": {
-        "en": "Sets the 0x0200 flag in HeatChill writes for installations that allow network fan control."
+        "en": "Sets the 0x0200 HeatChill manual-fan flag on mode writes. Low, Medium, and High fan modes set this automatically."
       },
       "value": false
     }

@@ -1,3 +1,5 @@
 'use strict';
 
-module.exports = require('../../.homeybuild/drivers/vartronic_convector/device.js');
+const deviceModule = require('../../.homeybuild/drivers/vartronic_convector/device.js');
+
+module.exports = deviceModule.default ?? deviceModule;
